@@ -43,6 +43,7 @@ model Number {
   autoReconnect Boolean      @default(true)
   createdAt     DateTime     @default(now())
   lastConnected DateTime?
+  lastActivity  DateTime?
 
   groupMembers GroupMember[]
   sentLogs     ConversationLog[] @relation("SentLogs")

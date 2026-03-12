@@ -1,6 +1,7 @@
 ﻿const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const path = require('path');
+const fs = require('fs');
 const db = require('../services/database');
 
 /**
@@ -16,11 +17,14 @@ class WWebJSEngine {
     this.status = 'disconnected';
     this.client = null;
     this.lastQr = null; // cached QR data URL for re-emission
+    this._destroyed = false;
+    this._sessionPath = path.join(__dirname, '../../sessions', numberId);
     this._lastMessageIds = new Map(); // track last message per chat for reactions
   }
 
   async initialize() {
-    const sessionPath = path.join(__dirname, '../../sessions', this.numberId);
+    this._destroyed = false;
+    const sessionPath = this._sessionPath;
 
     // Tenta encontrar Chromium em múltiplos caminhos
     const getPuppeteerPath = () => {
@@ -126,10 +130,20 @@ class WWebJSEngine {
     });
 
     this.client.on('auth_failure', async (msg) => {
-      console.error(`[WWJS ${this.numberId}] Falha de autenticaÃ§Ã£o:`, msg);
+      console.error(`[WWJS ${this.numberId}] Falha de autenticação:`, msg);
       this.status = 'auth_failure';
       await db.updateNumberStatus(this.numberId, 'auth_failure');
       this.io.emit('number:status', { id: this.numberId, status: 'auth_failure', error: msg });
+
+      if (!this._destroyed) {
+        // Limpa sessão corrompida/expirada e reinicia para gerar novo QR
+        console.log(`[WWJS ${this.numberId}] Limpando sessão e reiniciando para gerar novo QR...`);
+        await this.destroy().catch(() => {});
+        this._clearSessionFolder();
+        setTimeout(() => {
+          if (!this._destroyed) this.initialize().catch(console.error);
+        }, 3000);
+      }
     });
 
     this.client.on('disconnected', async (reason) => {
@@ -186,11 +200,24 @@ class WWebJSEngine {
   }
 
   async destroy() {
+    this._destroyed = true;
     if (this.client) {
       await this.client.destroy().catch(() => {});
       this.client = null;
     }
     this.status = 'disconnected';
+  }
+
+  _clearSessionFolder() {
+    try {
+      // Remove toda a pasta de sessão para forçar novo QR na próxima conexão
+      if (fs.existsSync(this._sessionPath)) {
+        fs.rmSync(this._sessionPath, { recursive: true, force: true });
+        console.log(`[WWJS ${this.numberId}] Pasta de sessão removida: ${this._sessionPath}`);
+      }
+    } catch (e) {
+      console.warn(`[WWJS ${this.numberId}] Erro ao remover sessão:`, e.message);
+    }
   }
 }
 

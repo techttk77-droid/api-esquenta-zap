@@ -1,6 +1,8 @@
 const db = require('./database');
 const { WWebJSEngine } = require('../engines/wwjs');
 const { BaileysEngine } = require('../engines/baileys');
+const fs = require('fs');
+const path = require('path');
 
 /**
  * SessionManager
@@ -12,6 +14,7 @@ class SessionManager {
     this.io = io;
     /** @type {Map<string, WWebJSEngine|BaileysEngine>} */
     this.sessions = new Map();
+    this._startExpiryWatcher();
   }
 
   /**
@@ -94,6 +97,7 @@ class SessionManager {
     }
 
     await session.sendMessage(toPhone, text);
+    await db.updateNumberLastActivity(fromId).catch(() => {});
   }
 
   /**
@@ -110,6 +114,7 @@ class SessionManager {
       parseInt(settings.max_delay_ms || '15000')
     );
     await session.sendAudio(toPhone, audioPath);
+    await db.updateNumberLastActivity(fromId).catch(() => {});
   }
 
   /**
@@ -126,6 +131,7 @@ class SessionManager {
       parseInt(settings.max_delay_ms || '15000')
     );
     await session.sendSticker(toPhone, stickerPath);
+    await db.updateNumberLastActivity(fromId).catch(() => {});
   }
 
   /**
@@ -137,6 +143,57 @@ class SessionManager {
       throw new Error(`Number ${fromId} is not connected`);
     }
     await session.sendReaction(toPhone, emoji);
+    await db.updateNumberLastActivity(fromId).catch(() => {});
+  }
+
+  /**
+   * Verifica a cada hora se há sessões conectadas sem atividade por mais de 7 dias.
+   * Quando encontrada, encerra a sessão e limpa a pasta local para forçar novo QR.
+   */
+  _startExpiryWatcher() {
+    const EXPIRY_DAYS = 7;
+    const CHECK_INTERVAL_MS = 60 * 60 * 1000; // a cada hora
+
+    setInterval(async () => {
+      try {
+        const threshold = new Date(Date.now() - EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+        const expired = await db.getExpiredSessions(threshold);
+
+        for (const number of expired) {
+          console.log(`[SessionManager] Sessão expirada (${EXPIRY_DAYS} dias sem atividade): ${number.name || number.id}`);
+
+          const session = this.sessions.get(number.id);
+          if (session) {
+            await session.destroy().catch(() => {});
+            this.sessions.delete(number.id);
+          }
+
+          this._clearSessionFolder(number.id, number.engine);
+          await db.updateNumberStatus(number.id, 'disconnected');
+          this.io.emit('number:status', { id: number.id, status: 'disconnected', reason: 'session_expired' });
+        }
+      } catch (e) {
+        console.error('[SessionManager] Erro no watcher de expiração:', e.message);
+      }
+    }, CHECK_INTERVAL_MS);
+  }
+
+  /**
+   * Remove a pasta de sessão do filesystem para forçar QR novo na próxima conexão.
+   */
+  _clearSessionFolder(numberId, engine) {
+    try {
+      const folderPath = engine === 'baileys'
+        ? path.join(__dirname, '../../sessions', `baileys_${numberId}`)
+        : path.join(__dirname, '../../sessions', numberId);
+
+      if (fs.existsSync(folderPath)) {
+        fs.rmSync(folderPath, { recursive: true, force: true });
+        console.log(`[SessionManager] Pasta de sessão removida: ${folderPath}`);
+      }
+    } catch (e) {
+      console.warn(`[SessionManager] Erro ao remover pasta de sessão ${numberId}:`, e.message);
+    }
   }
 
   /**

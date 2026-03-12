@@ -95,6 +95,30 @@ class DatabaseService {
     return this.#prisma.number.update({ where: { id }, data: { engine } });
   }
 
+  async updateNumberLastActivity(id) {
+    return this.#prisma.number.update({
+      where: { id },
+      data:  { lastActivity: new Date() },
+    });
+  }
+
+  /**
+   * Retorna números conectados cuja última atividade (ou conexão) é anterior ao threshold.
+   * Usado para expirar sessões inativas após N dias.
+   */
+  async getExpiredSessions(thresholdDate) {
+    return this.#prisma.number.findMany({
+      where: {
+        status: 'connected',
+        OR: [
+          { lastActivity:  { lt: thresholdDate } },
+          { lastActivity:  null, lastConnected: { lt: thresholdDate } },
+          { lastActivity:  null, lastConnected: null },
+        ],
+      },
+    });
+  }
+
   async deleteNumber(id) {
     return this.#prisma.number.delete({ where: { id } });
   }
