@@ -1,0 +1,165 @@
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  makeInMemoryStore,
+  proto,
+  generateWAMessageFromContent,
+  prepareWAMessageMedia,
+} = require('@whiskeysockets/baileys');
+const { Boom } = require('@hapi/boom');
+const qrcode = require('qrcode');
+const path = require('path');
+const fs = require('fs');
+const pino = require('pino');
+const db = require('../services/database');
+
+/**
+ * BaileysEngine
+ * Wraps @whiskeysockets/baileys for a single number session.
+ * Extremely lightweight — no browser needed.
+ */
+class BaileysEngine {
+  constructor(numberId, engineType, io) {
+    this.numberId = numberId;
+    this.engineType = engineType || 'baileys';
+    this.io = io;
+    this.status = 'disconnected';
+    this.sock = null;
+    this._store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
+    this._lastMessages = new Map(); // chatId -> last message key
+    this._authPath = path.join(__dirname, '../../sessions', `baileys_${this.numberId}`);
+  }
+
+  async initialize() {
+    fs.mkdirSync(this._authPath, { recursive: true });
+
+    const { state, saveCreds } = await useMultiFileAuthState(this._authPath);
+    const { version } = await fetchLatestBaileysVersion();
+
+    this.sock = makeWASocket({
+      version,
+      logger: pino({ level: 'silent' }),
+      printQRInTerminal: false,
+      auth: state,
+      generateHighQualityLinkPreview: false,
+      browser: ['Esquenta Zap', 'Chrome', '120.0.0'],
+    });
+
+    this._store.bind(this.sock.ev);
+
+    this.sock.ev.on('creds.update', saveCreds);
+
+    this.sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        console.log(`[Baileys ${this.numberId}] QR recebido`);
+        this.status = 'qr_pending';
+        await db.updateNumberStatus(this.numberId, 'qr_pending');
+        try {
+          const qrDataUrl = await qrcode.toDataURL(qr);
+          this.io.emit('number:qr', { id: this.numberId, qr: qrDataUrl, engine: 'baileys' });
+          this.io.emit('number:status', { id: this.numberId, status: 'qr_pending' });
+        } catch (e) {
+          console.error(`[Baileys ${this.numberId}] Erro no QR:`, e.message);
+        }
+      }
+
+      if (connection === 'open') {
+        const phone = this.sock.user?.id?.split(':')[0] || null;
+        console.log(`[Baileys ${this.numberId}] Conectado! Telefone: ${phone}`);
+        this.status = 'connected';
+        await db.updateNumberStatus(this.numberId, 'connected', phone);
+        this.io.emit('number:status', { id: this.numberId, status: 'connected', phone, engine: 'baileys' });
+        this.io.emit('number:qr_clear', { id: this.numberId });
+      }
+
+      if (connection === 'close') {
+        const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+        const shouldReconnect = reason !== DisconnectReason.loggedOut;
+
+        console.log(`[Baileys ${this.numberId}] Conexão fechada. Motivo: ${reason}`);
+        this.status = 'disconnected';
+        await db.updateNumberStatus(this.numberId, 'disconnected');
+        this.io.emit('number:status', { id: this.numberId, status: 'disconnected', reason });
+
+        if (shouldReconnect) {
+          console.log(`[Baileys ${this.numberId}] Reconectando...`);
+          setTimeout(() => this.initialize(), 5000);
+        }
+      }
+    });
+
+    this.sock.ev.on('messages.upsert', ({ messages }) => {
+      for (const msg of messages) {
+        if (!msg.key.fromMe && msg.key.remoteJid) {
+          this._lastMessages.set(msg.key.remoteJid, msg.key);
+        }
+      }
+    });
+  }
+
+  async sendMessage(toPhone, text) {
+    const jid = _formatJid(toPhone);
+    const result = await this.sock.sendMessage(jid, { text });
+    this._lastMessages.set(jid, result.key);
+    return result;
+  }
+
+  async sendTyping(toPhone, durationMs = 3000) {
+    const jid = _formatJid(toPhone);
+    await this.sock.sendPresenceUpdate('composing', jid);
+    await _delay(Math.min(durationMs, 5000));
+    await this.sock.sendPresenceUpdate('paused', jid);
+  }
+
+  async sendAudio(toPhone, audioPath) {
+    const jid = _formatJid(toPhone);
+    const buffer = fs.readFileSync(audioPath);
+    return this.sock.sendMessage(jid, {
+      audio: buffer,
+      mimetype: 'audio/ogg; codecs=opus',
+      ptt: true, // send as voice note
+    });
+  }
+
+  async sendSticker(toPhone, stickerPath) {
+    const jid = _formatJid(toPhone);
+    const buffer = fs.readFileSync(stickerPath);
+    return this.sock.sendMessage(jid, {
+      sticker: buffer,
+    });
+  }
+
+  async sendReaction(toPhone, emoji) {
+    const jid = _formatJid(toPhone);
+    const msgKey = this._lastMessages.get(jid);
+    if (!msgKey) return;
+    return this.sock.sendMessage(jid, {
+      react: { text: emoji, key: msgKey },
+    });
+  }
+
+  async destroy() {
+    if (this.sock) {
+      await this.sock.logout().catch(() => {});
+      this.sock.ev.removeAllListeners();
+      this.sock = null;
+    }
+    this.status = 'disconnected';
+  }
+}
+
+function _formatJid(phone) {
+  if (phone.includes('@')) return phone;
+  const digits = phone.replace(/\D/g, '');
+  return `${digits}@s.whatsapp.net`;
+}
+
+function _delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+module.exports = { BaileysEngine };
