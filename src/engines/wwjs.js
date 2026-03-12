@@ -21,6 +21,58 @@ class WWebJSEngine {
   async initialize() {
     const sessionPath = path.join(__dirname, '../../sessions', this.numberId);
 
+    // Tenta encontrar Chromium em múltiplos caminhos
+    const getPuppeteerPath = () => {
+      const fs = require('fs');
+      const { execSync } = require('child_process');
+
+      const isAccessible = (p) => {
+        try { fs.accessSync(p); return true; } catch { return false; }
+      };
+
+      // 1. Variável de ambiente (prioritário) — valida se o caminho existe
+      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        const envPath = process.env.PUPPETEER_EXECUTABLE_PATH.trim();
+        if (isAccessible(envPath)) {
+          console.log(`[WWJS] Chromium via env: ${envPath}`);
+          return envPath;
+        }
+        console.warn(`[WWJS] PUPPETEER_EXECUTABLE_PATH inválido: "${envPath}" — tentando outros caminhos...`);
+      }
+
+      // 2. Busca dinâmica via 'which' (funciona com PATH do nixpacks/Railway)
+      try {
+        const found = execSync(
+          'which chromium || which chromium-browser || which google-chrome-stable || which google-chrome',
+          { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+        ).trim().split('\n')[0];
+        if (found && isAccessible(found)) {
+          console.log(`[WWJS] Chromium via which: ${found}`);
+          return found;
+        }
+      } catch {}
+
+      // 3. Caminhos estáticos comuns em produção
+      const staticPaths = [
+        '/run/current-system/sw/bin/chromium',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/snap/bin/chromium',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+      ];
+      for (const p of staticPaths) {
+        if (isAccessible(p)) {
+          console.log(`[WWJS] Chromium via path estático: ${p}`);
+          return p;
+        }
+      }
+
+      // 4. Deixa Puppeteer procurar automaticamente
+      console.warn('[WWJS] Chromium não encontrado — deixando Puppeteer decidir.');
+      return undefined;
+    };
+
     this.client = new Client({
       authStrategy: new LocalAuth({
         clientId: this.numberId,
@@ -28,7 +80,7 @@ class WWebJSEngine {
       }),
       puppeteer: {
         headless: true,
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        executablePath: getPuppeteerPath(),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

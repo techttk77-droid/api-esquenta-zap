@@ -26,6 +26,10 @@ nixPkgs = [
 [phases.install]
 cmds = ["npm install", "npx prisma generate"]
 
+[variables]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/run/current-system/sw/bin/chromium"
+
 [start]
 cmd = "node src/index.js"
 
