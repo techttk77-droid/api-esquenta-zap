@@ -27,12 +27,14 @@ class BaileysEngine {
     this.io = io;
     this.status = 'disconnected';
     this.sock = null;
+    this._destroyed = false;
     this._store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
     this._lastMessages = new Map(); // chatId -> last message key
     this._authPath = path.join(__dirname, '../../sessions', `baileys_${this.numberId}`);
   }
 
   async initialize() {
+    this._destroyed = false;
     fs.mkdirSync(this._authPath, { recursive: true });
 
     const { state, saveCreds } = await useMultiFileAuthState(this._authPath);
@@ -85,9 +87,11 @@ class BaileysEngine {
         await db.updateNumberStatus(this.numberId, 'disconnected');
         this.io.emit('number:status', { id: this.numberId, status: 'disconnected', reason });
 
-        if (shouldReconnect) {
+        if (shouldReconnect && !this._destroyed) {
           console.log(`[Baileys ${this.numberId}] Reconectando...`);
-          setTimeout(() => this.initialize(), 5000);
+          setTimeout(() => {
+            if (!this._destroyed) this.initialize();
+          }, 5000);
         }
       }
     });
@@ -143,6 +147,7 @@ class BaileysEngine {
   }
 
   async destroy() {
+    this._destroyed = true;
     if (this.sock) {
       await this.sock.logout().catch(() => {});
       this.sock.ev.removeAllListeners();
