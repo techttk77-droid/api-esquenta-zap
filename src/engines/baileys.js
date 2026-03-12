@@ -3,10 +3,6 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeInMemoryStore,
-  proto,
-  generateWAMessageFromContent,
-  prepareWAMessageMedia,
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode');
@@ -29,7 +25,6 @@ class BaileysEngine {
     this.sock = null;
     this._destroyed = false;
     this.lastQr = null; // cached QR data URL para re-envio
-    this._store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
     this._lastMessages = new Map(); // chatId -> last message key
     this._authPath = path.join(__dirname, '../../sessions', `baileys_${this.numberId}`);
   }
@@ -49,8 +44,6 @@ class BaileysEngine {
       generateHighQualityLinkPreview: false,
       browser: ['Esquenta Zap', 'Chrome', '120.0.0'],
     });
-
-    this._store.bind(this.sock.ev);
 
     this.sock.ev.on('creds.update', saveCreds);
 
@@ -152,8 +145,11 @@ class BaileysEngine {
   async destroy() {
     this._destroyed = true;
     if (this.sock) {
-      await this.sock.logout().catch(() => {});
+      // Remove listeners ANTES de fechar para evitar disparar reconexão
       this.sock.ev.removeAllListeners();
+      try {
+        this.sock.ws?.close();
+      } catch (_) {}
       this.sock = null;
     }
     this.status = 'disconnected';
