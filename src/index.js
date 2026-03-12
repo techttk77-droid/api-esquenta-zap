@@ -65,8 +65,25 @@ io.on('connection', async (socket) => {
     db.getAllNumbers(),
     db.getSettings(),
   ]);
-  socket.emit('numbers:list', numbers);
+
+  // Mescla status ao vivo nas sessões ativas
+  const liveStatuses = sessionManager.getStatuses();
+  const numbersWithStatus = numbers.map((n) => ({
+    ...n,
+    status: liveStatuses[n.id] || n.status,
+  }));
+  socket.emit('numbers:list', numbersWithStatus);
   socket.emit('settings:current', settings);
+
+  // Re-envia QR pendente para o cliente que acabou de conectar
+  for (const [id, session] of sessionManager.sessions) {
+    if (session.status === 'qr_pending' && session.lastQr) {
+      socket.emit('number:qr', { id, qr: session.lastQr, engine: session.engineType });
+    }
+    if (session.status === 'connecting' || session.status === 'qr_pending' || session.status === 'connected') {
+      socket.emit('number:status', { id, status: session.status });
+    }
+  }
 });
 
 const PORT = process.env.PORT || 3001;

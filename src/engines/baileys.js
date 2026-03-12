@@ -28,6 +28,7 @@ class BaileysEngine {
     this.status = 'disconnected';
     this.sock = null;
     this._destroyed = false;
+    this.lastQr = null; // cached QR data URL para re-envio
     this._store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
     this._lastMessages = new Map(); // chatId -> last message key
     this._authPath = path.join(__dirname, '../../sessions', `baileys_${this.numberId}`);
@@ -62,6 +63,7 @@ class BaileysEngine {
         await db.updateNumberStatus(this.numberId, 'qr_pending');
         try {
           const qrDataUrl = await qrcode.toDataURL(qr);
+          this.lastQr = qrDataUrl; // cache para re-envio
           this.io.emit('number:qr', { id: this.numberId, qr: qrDataUrl, engine: 'baileys' });
           this.io.emit('number:status', { id: this.numberId, status: 'qr_pending' });
         } catch (e) {
@@ -73,6 +75,7 @@ class BaileysEngine {
         const phone = this.sock.user?.id?.split(':')[0] || null;
         console.log(`[Baileys ${this.numberId}] Conectado! Telefone: ${phone}`);
         this.status = 'connected';
+        this.lastQr = null; // limpa QR cacheado
         await db.updateNumberStatus(this.numberId, 'connected', phone);
         this.io.emit('number:status', { id: this.numberId, status: 'connected', phone, engine: 'baileys' });
         this.io.emit('number:qr_clear', { id: this.numberId });

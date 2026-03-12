@@ -15,6 +15,7 @@ class WWebJSEngine {
     this.io = io;
     this.status = 'disconnected';
     this.client = null;
+    this.lastQr = null; // cached QR data URL for re-emission
     this._lastMessageIds = new Map(); // track last message per chat for reactions
   }
 
@@ -99,6 +100,7 @@ class WWebJSEngine {
       await db.updateNumberStatus(this.numberId, 'qr_pending');
       try {
         const qrDataUrl = await qrcode.toDataURL(qr);
+        this.lastQr = qrDataUrl; // cache para re-envio
         this.io.emit('number:qr', { id: this.numberId, qr: qrDataUrl, engine: 'wwjs' });
         this.io.emit('number:status', { id: this.numberId, status: 'qr_pending' });
       } catch (e) {
@@ -110,6 +112,7 @@ class WWebJSEngine {
       const phone = this.client.info?.wid?.user || null;
       console.log(`[WWJS ${this.numberId}] Conectado! Telefone: ${phone}`);
       this.status = 'connected';
+      this.lastQr = null; // limpa QR cacheado
       await db.updateNumberStatus(this.numberId, 'connected', phone);
       this.io.emit('number:status', { id: this.numberId, status: 'connected', phone, engine: 'wwjs' });
       this.io.emit('number:qr_clear', { id: this.numberId });
