@@ -18,14 +18,18 @@ const mediaRouter = require('./routes/media');
 const app = express();
 const server = http.createServer(app);
 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: ALLOWED_ORIGINS,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
   },
 });
 
-app.use(cors({ origin: ['http://localhost:3000', 'http://127.0.0.1:3000'] }));
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 app.use('/uploads/audios', express.static(path.join(__dirname, '../audios')));
 app.use('/uploads/stickers', express.static(path.join(__dirname, '../stickers')));
@@ -76,8 +80,7 @@ async function bootstrap() {
 
   // 3. Sobe o servidor
   server.listen(PORT, async () => {
-    console.log(`\n🚀 WhatsApp Warmer Backend rodando em http://localhost:${PORT}`);
-    console.log(`📊 Dashboard disponível em http://localhost:3000\n`);
+    console.log(`\n🚀 WhatsApp Warmer Backend rodando na porta ${PORT}`);
 
     // Auto-reconectar números que estavam conectados antes do restart
     const numbers = await db.getAllNumbers();
