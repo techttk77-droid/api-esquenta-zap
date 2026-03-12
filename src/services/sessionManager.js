@@ -47,6 +47,7 @@ class SessionManager {
     // Inicia em background — erros são tratados via WebSocket, não HTTP
     instance.initialize().catch(async (e) => {
       console.error(`[SessionManager] Erro ao inicializar ${number.engine} para ${numberId}:`, e.message);
+      instance.lastError = e.message; // guarda para debug via /status
       this.sessions.delete(numberId);
       await db.updateNumberStatus(numberId, 'error').catch(() => {});
       this.io.emit('number:status', { id: numberId, status: 'error', error: e.message });

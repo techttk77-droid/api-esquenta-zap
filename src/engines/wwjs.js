@@ -26,9 +26,11 @@ class WWebJSEngine {
     this._destroyed = false;
     const sessionPath = this._sessionPath;
 
+    // Garante que a pasta de sessão existe (Railway não persiste o filesystem entre deploys)
+    fs.mkdirSync(sessionPath, { recursive: true });
+
     // Tenta encontrar Chromium em múltiplos caminhos
     const getPuppeteerPath = () => {
-      const fs = require('fs');
       const { execSync } = require('child_process');
 
       const isAccessible = (p) => {
@@ -45,11 +47,11 @@ class WWebJSEngine {
         console.warn(`[WWJS] PUPPETEER_EXECUTABLE_PATH inválido: "${envPath}" — tentando outros caminhos...`);
       }
 
-      // 2. Busca dinâmica via 'which' (funciona com PATH do nixpacks/Railway)
+      // 2. Busca dinâmica via 'which' — passa PATH do processo pai para o filho
       try {
         const found = execSync(
           'which chromium || which chromium-browser || which google-chrome-stable || which google-chrome',
-          { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+          { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], env: { PATH: process.env.PATH } }
         ).trim().split('\n')[0];
         if (found && isAccessible(found)) {
           console.log(`[WWJS] Chromium via which: ${found}`);
@@ -57,7 +59,7 @@ class WWebJSEngine {
         }
       } catch {}
 
-      // 3. Caminhos estáticos comuns em produção
+      // 3. Caminhos estáticos comuns em produção (NixOS/Railway/Ubuntu)
       const staticPaths = [
         '/run/current-system/sw/bin/chromium',
         '/usr/bin/chromium-browser',
@@ -65,6 +67,7 @@ class WWebJSEngine {
         '/snap/bin/chromium',
         '/usr/bin/google-chrome-stable',
         '/usr/bin/google-chrome',
+        '/nix/var/nix/profiles/default/bin/chromium',
       ];
       for (const p of staticPaths) {
         if (isAccessible(p)) {
@@ -136,9 +139,12 @@ class WWebJSEngine {
       this.io.emit('number:status', { id: this.numberId, status: 'auth_failure', error: msg });
 
       if (!this._destroyed) {
-        // Limpa sessão corrompida/expirada e reinicia para gerar novo QR
+        // Destrói apenas o client sem tocar em _destroyed, limpa sessão e reinicia
         console.log(`[WWJS ${this.numberId}] Limpando sessão e reiniciando para gerar novo QR...`);
-        await this.destroy().catch(() => {});
+        if (this.client) {
+          await this.client.destroy().catch(() => {});
+          this.client = null;
+        }
         this._clearSessionFolder();
         setTimeout(() => {
           if (!this._destroyed) this.initialize().catch(console.error);

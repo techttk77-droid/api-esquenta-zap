@@ -35,6 +35,23 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET /api/numbers/:id/status — retorna status ao vivo + último erro da sessão
+router.get('/:id/status', async (req, res) => {
+  try {
+    const session = req.sessionManager.getSession(req.params.id);
+    const number = await db.getNumberById(req.params.id);
+    res.json({
+      id: req.params.id,
+      db_status: number?.status,
+      live_status: session?.status || 'no_session',
+      engine: session?.engineType || number?.engine,
+      lastError: session?.lastError || null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/numbers/:id/connect
 router.post('/:id/connect', async (req, res) => {
   try {
