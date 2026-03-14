@@ -62,21 +62,25 @@ class DatabaseService {
 
   // --- Numbers ---------------------------------------------------------------
 
-  async getAllNumbers() {
-    return this.#prisma.number.findMany({ orderBy: { createdAt: 'asc' } });
+  async getAllNumbers(userId = null) {
+    return this.#prisma.number.findMany({
+      where: userId ? { userId } : {},
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async getNumberById(id) {
     return this.#prisma.number.findUnique({ where: { id } });
   }
 
-  async createNumber({ name, phone, engine, autoReconnect }) {
+  async createNumber({ name, phone, engine, autoReconnect, userId = null }) {
     return this.#prisma.number.create({
       data: {
         name:          name          ?? null,
         phone:         phone         ?? null,
         engine:        engine        ?? 'wwjs',
         autoReconnect: autoReconnect ?? true,
+        userId:        userId        ?? null,
       },
     });
   }
@@ -102,6 +106,10 @@ class DatabaseService {
     });
   }
 
+  async getNumbersByUserId(userId) {
+    return this.#prisma.number.findMany({ where: { userId } });
+  }
+
   /**
    * Retorna números conectados cuja última atividade (ou conexão) é anterior ao threshold.
    * Usado para expirar sessões inativas após N dias.
@@ -125,8 +133,9 @@ class DatabaseService {
 
   // --- Groups ----------------------------------------------------------------
 
-  async getAllGroups() {
+  async getAllGroups(userId = null) {
     return this.#prisma.group.findMany({
+      where:   userId ? { userId } : {},
       orderBy: { createdAt: 'asc' },
       include: { members: { include: { number: true } } },
     });
@@ -139,9 +148,9 @@ class DatabaseService {
     });
   }
 
-  async createGroup(name) {
+  async createGroup(name, userId = null) {
     return this.#prisma.group.create({
-      data: { name },
+      data: { name, userId: userId ?? null },
       include: { members: { include: { number: true } } },
     });
   }
@@ -172,9 +181,16 @@ class DatabaseService {
     });
   }
 
-  async getRecentLogs(limit = 100) {
+  async getRecentLogs(limit = 100, userId = null) {
+    let where = {};
+    if (userId) {
+      const numbers = await this.#prisma.number.findMany({ where: { userId }, select: { id: true } });
+      const ids = numbers.map((n) => n.id);
+      where = { OR: [{ fromNumberId: { in: ids } }, { toNumberId: { in: ids } }] };
+    }
     return this.#prisma.conversationLog.findMany({
       take:    limit,
+      where,
       orderBy: { sentAt: 'desc' },
       include: {
         fromNumber: { select: { id: true, name: true, phone: true } },
@@ -185,15 +201,18 @@ class DatabaseService {
 
   // --- Scheduled Tasks -------------------------------------------------------
 
-  async getAllTasks() {
-    return this.#prisma.scheduledTask.findMany({ orderBy: { createdAt: 'asc' } });
+  async getAllTasks(userId = null) {
+    return this.#prisma.scheduledTask.findMany({
+      where:   userId ? { userId } : {},
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async getTaskById(id) {
     return this.#prisma.scheduledTask.findUnique({ where: { id } });
   }
 
-  async createTask({ name, type, cronExpression, enabled, config }) {
+  async createTask({ name, type, cronExpression, enabled, config, userId = null }) {
     return this.#prisma.scheduledTask.create({
       data: {
         name,
@@ -201,6 +220,7 @@ class DatabaseService {
         cronExpression,
         enabled: enabled ?? true,
         config:  config  ?? {},
+        userId:  userId  ?? null,
       },
     });
   }
@@ -243,9 +263,9 @@ class DatabaseService {
 
   // --- Media -----------------------------------------------------------------
 
-  async getAllMedia(type = null) {
+  async getAllMedia(type = null, userId = null) {
     return this.#prisma.mediaFile.findMany({
-      where:   type ? { type } : undefined,
+      where:   { ...(type ? { type } : {}), ...(userId ? { userId } : {}) },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -254,14 +274,46 @@ class DatabaseService {
     return this.#prisma.mediaFile.findUnique({ where: { id } });
   }
 
-  async createMedia({ name, type, filename }) {
+  async createMedia({ name, type, filename, userId = null }) {
     return this.#prisma.mediaFile.create({
-      data: { name, type, filename },
+      data: { name, type, filename, userId: userId ?? null },
     });
   }
 
   async deleteMedia(id) {
     return this.#prisma.mediaFile.delete({ where: { id } });
+  }
+
+  // --- Users ----------------------------------------------------------------
+
+  async createUser({ username, password }) {
+    return this.#prisma.user.create({ data: { username, password } });
+  }
+
+  async getUserByUsername(username) {
+    return this.#prisma.user.findUnique({ where: { username } });
+  }
+
+  async getUserById(id) {
+    return this.#prisma.user.findUnique({ where: { id } });
+  }
+
+  async updateUserMachineId(id, machineId) {
+    return this.#prisma.user.update({ where: { id }, data: { machineId } });
+  }
+
+  async getUserCount() {
+    return this.#prisma.user.count();
+  }
+
+  /**
+   * Primeiro usuário criado assume todos os registros sem dono (migração de sistema pré-auth).
+   */
+  async claimOrphanedData(userId) {
+    await this.#prisma.number.updateMany({ where: { userId: null }, data: { userId } });
+    await this.#prisma.group.updateMany({ where: { userId: null }, data: { userId } });
+    await this.#prisma.scheduledTask.updateMany({ where: { userId: null }, data: { userId } });
+    await this.#prisma.mediaFile.updateMany({ where: { userId: null }, data: { userId } });
   }
 }
 

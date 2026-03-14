@@ -48,6 +48,8 @@ model Number {
   createdAt     DateTime     @default(now())
   lastConnected DateTime?
   lastActivity  DateTime?
+  userId        String?
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   groupMembers GroupMember[]
   sentLogs     ConversationLog[] @relation("SentLogs")
@@ -56,12 +58,29 @@ model Number {
   @@map("numbers")
 }
 
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  machineId String?
+  createdAt DateTime @default(now())
+
+  numbers    Number[]
+  groups     Group[]
+  tasks      ScheduledTask[]
+  mediaFiles MediaFile[]
+
+  @@map("users")
+}
+
 model Group {
   id              String   @id @default(uuid())
   name            String
   whatsappGroupId String?
   creatorNumberId String?
   createdAt       DateTime @default(now())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   members GroupMember[]
 
@@ -102,6 +121,8 @@ model ScheduledTask {
   config         Json      @default("{}")
   lastRun        DateTime?
   createdAt      DateTime  @default(now())
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("scheduled_tasks")
 }
@@ -119,6 +140,8 @@ model MediaFile {
   type      MediaType
   filename  String
   createdAt DateTime  @default(now())
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("media_files")
 }

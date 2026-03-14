@@ -25,6 +25,17 @@ class SessionManager {
   }
 
   /**
+   * Emite evento apenas para o usuário dono, ou broadcast se não há userId.
+   */
+  _emitToUser(userId, event, data) {
+    if (userId) {
+      this.io.to(`user:${userId}`).emit(event, data);
+    } else {
+      this.io.emit(event, data);
+    }
+  }
+
+  /**
    * Connect (or reconnect) a number by its DB id.
    * Engine is chosen from the number's saved setting.
    */
@@ -38,11 +49,11 @@ class SessionManager {
     }
 
     const EngineClass = this._getEngineClass(number.engine);
-    const instance = new EngineClass(numberId, number.engine, this.io);
+    const instance = new EngineClass(numberId, number.engine, this.io, number.userId);
 
     this.sessions.set(numberId, instance);
     await db.updateNumberStatus(numberId, 'connecting');
-    this.io.emit('number:status', { id: numberId, status: 'connecting' });
+    this._emitToUser(number.userId, 'number:status', { id: numberId, status: 'connecting' });
 
     // Inicia em background — erros são tratados via WebSocket, não HTTP
     instance.initialize().catch(async (e) => {
@@ -50,7 +61,7 @@ class SessionManager {
       instance.lastError = e.message; // guarda para debug via /status
       this.sessions.delete(numberId);
       await db.updateNumberStatus(numberId, 'auth_failure').catch(() => {});
-      this.io.emit('number:status', { id: numberId, status: 'error', error: e.message });
+      this._emitToUser(number.userId, 'number:status', { id: numberId, status: 'error', error: e.message });
     });
   }
 
@@ -67,12 +78,23 @@ class SessionManager {
    */
   async disconnectNumber(numberId) {
     const session = this.sessions.get(numberId);
+    const userId = session?.userId || (await db.getNumberById(numberId).catch(() => null))?.userId;
     if (session) {
       await session.destroy().catch(() => {});
       this.sessions.delete(numberId);
     }
     await db.updateNumberStatus(numberId, 'disconnected');
-    this.io.emit('number:status', { id: numberId, status: 'disconnected' });
+    this._emitToUser(userId, 'number:status', { id: numberId, status: 'disconnected' });
+  }
+
+  /**
+   * Desconecta todas as sessões WhatsApp de um usuário (ex: troca de máquina).
+   */
+  async disconnectUserSessions(userId) {
+    const numbers = await db.getNumbersByUserId(userId);
+    for (const number of numbers) {
+      await this.disconnectNumber(number.id).catch(() => {});
+    }
   }
 
   /**
@@ -205,7 +227,7 @@ class SessionManager {
 
           this._clearSessionFolder(number.id, number.engine);
           await db.updateNumberStatus(number.id, 'disconnected');
-          this.io.emit('number:status', { id: number.id, status: 'disconnected', reason: 'session_expired' });
+          this._emitToUser(number.userId, 'number:status', { id: number.id, status: 'disconnected', reason: 'session_expired' });
         }
       } catch (e) {
         console.error('[SessionManager] Erro no watcher de expiração:', e.message);

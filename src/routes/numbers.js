@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
+const { authMiddleware } = require('../middleware/auth');
+
+// Todos os endpoints de números requerem autenticação
+router.use(authMiddleware);
 
 // GET /api/numbers
 router.get('/', async (req, res) => {
   try {
-    const numbers = await db.getAllNumbers();
+    const numbers = await db.getAllNumbers(req.user.userId);
     const statuses = req.sessionManager.getStatuses();
     const result = numbers.map((n) => ({
       ...n,
@@ -25,10 +29,10 @@ router.post('/', async (req, res) => {
     // Seleciona engine automaticamente com base no threshold
     const settings = await db.getSettings();
     const threshold = parseInt(settings.engine_threshold || '10');
-    const allNumbers = await db.getAllNumbers();
+    const allNumbers = await db.getAllNumbers(req.user.userId);
     const selectedEngine = engine || (allNumbers.length >= threshold ? 'baileys' : 'wwjs');
 
-    const number = await db.createNumber({ name, phone, engine: selectedEngine, autoReconnect });
+    const number = await db.createNumber({ name, phone, engine: selectedEngine, autoReconnect, userId: req.user.userId });
     res.json(number);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -112,7 +116,7 @@ router.post('/:id/send-text', async (req, res) => {
 // GET /api/numbers/logs/recent
 router.get('/logs/recent', async (req, res) => {
   try {
-    const logs = await db.getRecentLogs(parseInt(req.query.limit) || 100);
+    const logs = await db.getRecentLogs(parseInt(req.query.limit) || 100, req.user.userId);
     res.json(logs);
   } catch (e) {
     res.status(500).json({ error: e.message });

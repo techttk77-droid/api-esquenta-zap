@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
+const { authMiddleware } = require('../middleware/auth');
+
+// Todos os endpoints do scheduler requerem autenticação
+router.use(authMiddleware);
 
 // GET /api/scheduler
 router.get('/', async (req, res) => {
   try {
-    res.json(await db.getAllTasks());
+    res.json(await db.getAllTasks(req.user.userId));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -14,7 +18,7 @@ router.get('/', async (req, res) => {
 // POST /api/scheduler
 router.post('/', async (req, res) => {
   try {
-    const task = await req.scheduler.addTask(_normalizeTaskBody(req.body));
+    const task = await req.scheduler.addTask(_normalizeTaskBody(req.body, req.user.userId));
     res.json(task);
   } catch (e) {
     console.error('[Scheduler POST] Erro:', e.message, '\nBody recebido:', JSON.stringify(req.body));
@@ -100,7 +104,7 @@ const TYPE_MAP = {
  * O frontend pode enviar campos como groupId, messagesPerCycle, fromId, etc.
  * diretamente no body. O banco espera que esses campos fiquem dentro de `config`.
  */
-function _normalizeTaskBody(body) {
+function _normalizeTaskBody(body, userId = null) {
   const { name, type, cronExpression, enabled, config, ...rest } = body;
 
   // Converte o tipo (display name ou variante) para o valor do enum Prisma
@@ -111,7 +115,9 @@ function _normalizeTaskBody(body) {
     ? config
     : _buildConfig(resolvedType, rest);
 
-  return { name, type: resolvedType, cronExpression, enabled, config: resolvedConfig };
+  const result = { name, type: resolvedType, cronExpression, enabled, config: resolvedConfig };
+  if (userId) result.userId = userId;
+  return result;
 }
 
 function _buildConfig(type, fields) {

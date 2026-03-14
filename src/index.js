@@ -9,6 +9,7 @@ const db = require('./services/database');
 const { SessionManager } = require('./services/sessionManager');
 const { Scheduler } = require('./services/scheduler');
 
+const authRouter = require('./routes/auth');
 const numbersRouter = require('./routes/numbers');
 const groupsRouter = require('./routes/groups');
 const schedulerRouter = require('./routes/scheduler');
@@ -47,24 +48,45 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Rotas
+// Rota pública de autenticação (sem middleware de auth)
+app.use('/api/auth', (req, _res, next) => { req.sessionManager = sessionManager; next(); }, authRouter);
+
+// Rotas protegidas (authMiddleware aplicado internamente em cada router)
 app.use('/api/numbers', numbersRouter);
 app.use('/api/groups', groupsRouter);
 app.use('/api/scheduler', schedulerRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/media', mediaRouter);
 
-// Socket.IO
+// Socket.IO — autenticação via JWT no handshake
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('./middleware/auth');
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Não autenticado: token ausente'));
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    socket.userId = payload.userId;
+    next();
+  } catch {
+    next(new Error('Token inválido ou expirado'));
+  }
+});
+
 io.on('connection', async (socket) => {
-  console.log('[Socket.IO] Cliente conectado:', socket.id);
+  console.log('[Socket.IO] Cliente conectado:', socket.id, '| userId:', socket.userId);
+
+  // Entra na sala privada do usuário — todos os eventos são emitidos para esta sala
+  socket.join(`user:${socket.userId}`);
 
   socket.on('disconnect', () => {
     console.log('[Socket.IO] Cliente desconectado:', socket.id);
   });
 
-  // Envia estado atual para o cliente recém conectado
+  // Envia estado atual apenas para este usuário
   const [numbers, settings] = await Promise.all([
-    db.getAllNumbers(),
+    db.getAllNumbers(socket.userId),
     db.getSettings(),
   ]);
 
@@ -77,8 +99,9 @@ io.on('connection', async (socket) => {
   socket.emit('numbers:list', numbersWithStatus);
   socket.emit('settings:current', settings);
 
-  // Re-envia QR pendente para o cliente que acabou de conectar
+  // Re-envia QR pendente apenas para sessões deste usuário
   for (const [id, session] of sessionManager.sessions) {
+    if (session.userId !== socket.userId) continue;
     if (session.status === 'qr_pending' && session.lastQr) {
       socket.emit('number:qr', { id, qr: session.lastQr, engine: session.engineType });
     }

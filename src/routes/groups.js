@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
+const { authMiddleware } = require('../middleware/auth');
+
+// Todos os endpoints de grupos requerem autenticação
+router.use(authMiddleware);
 
 // GET /api/groups
 router.get('/', async (req, res) => {
   try {
-    res.json(await db.getAllGroups());
+    res.json(await db.getAllGroups(req.user.userId));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -16,7 +20,7 @@ router.post('/', async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name é obrigatório' });
   try {
-    const group = await db.createGroup(name);
+    const group = await db.createGroup(name, req.user.userId);
     res.json(group);
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
+const { authMiddleware } = require('../middleware/auth');
+
+// Configurações são globais mas exigem autenticação
+router.use(authMiddleware);
 
 // GET /api/settings
 router.get('/', async (req, res) => {

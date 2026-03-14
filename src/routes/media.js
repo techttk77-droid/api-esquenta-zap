@@ -4,6 +4,10 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const db = require('../services/database');
+const { authMiddleware } = require('../middleware/auth');
+
+// Todos os endpoints de mídia requerem autenticação
+router.use(authMiddleware);
 
 // Garante que todas as pastas de mídia existam (Railway não persiste entre deploys)
 const MEDIA_DIRS = {
@@ -32,7 +36,7 @@ const uploadVideo   = multer({ storage: makeStorage(MEDIA_DIRS.video),   limits:
 router.get('/', async (req, res) => {
   try {
     const { type } = req.query;
-    res.json(await db.getAllMedia(type || null));
+    res.json(await db.getAllMedia(type || null, req.user.userId));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -46,6 +50,7 @@ router.post('/audio', uploadAudio.single('file'), async (req, res) => {
       name: req.body.name || req.file.originalname,
       type: 'audio',
       filename: req.file.filename,
+      userId: req.user.userId,
     });
     res.json(media);
   } catch (e) {
@@ -61,6 +66,7 @@ router.post('/sticker', uploadSticker.single('file'), async (req, res) => {
       name: req.body.name || req.file.originalname,
       type: 'sticker',
       filename: req.file.filename,
+      userId: req.user.userId,
     });
     res.json(media);
   } catch (e) {
@@ -76,6 +82,7 @@ router.post('/image', uploadImage.single('file'), async (req, res) => {
       name: req.body.name || req.file.originalname,
       type: 'image',
       filename: req.file.filename,
+      userId: req.user.userId,
     });
     res.json(media);
   } catch (e) {
@@ -91,6 +98,7 @@ router.post('/video', uploadVideo.single('file'), async (req, res) => {
       name: req.body.name || req.file.originalname,
       type: 'video',
       filename: req.file.filename,
+      userId: req.user.userId,
     });
     res.json(media);
   } catch (e) {

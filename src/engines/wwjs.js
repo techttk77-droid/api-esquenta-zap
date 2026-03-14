@@ -10,16 +10,26 @@ const db = require('../services/database');
  * Uses LocalAuth to persist session data between restarts.
  */
 class WWebJSEngine {
-  constructor(numberId, engineType, io) {
+  constructor(numberId, engineType, io, userId = null) {
     this.numberId = numberId;
     this.engineType = engineType || 'wwjs';
     this.io = io;
+    this.userId = userId;
     this.status = 'disconnected';
     this.client = null;
-    this.lastQr = null; // cached QR data URL for re-emission
+    this.lastQr = null;
     this._destroyed = false;
     this._sessionPath = path.join(__dirname, '../../sessions', numberId);
-    this._lastMessageIds = new Map(); // track last message per chat for reactions
+    this._lastMessageIds = new Map();
+  }
+
+  // Emite evento apenas para o usuário dono, ou broadcast se não há userId
+  _emit(event, data) {
+    if (this.userId) {
+      this.io.to(`user:${this.userId}`).emit(event, data);
+    } else {
+      this.io.emit(event, data);
+    }
   }
 
   async initialize() {
@@ -107,9 +117,9 @@ class WWebJSEngine {
       await db.updateNumberStatus(this.numberId, 'qr_pending');
       try {
         const qrDataUrl = await qrcode.toDataURL(qr);
-        this.lastQr = qrDataUrl; // cache para re-envio
-        this.io.emit('number:qr', { id: this.numberId, qr: qrDataUrl, engine: 'wwjs' });
-        this.io.emit('number:status', { id: this.numberId, status: 'qr_pending' });
+        this.lastQr = qrDataUrl;
+        this._emit('number:qr', { id: this.numberId, qr: qrDataUrl, engine: 'wwjs' });
+        this._emit('number:status', { id: this.numberId, status: 'qr_pending' });
       } catch (e) {
         console.error(`[WWJS ${this.numberId}] Erro ao gerar QR:`, e.message);
       }
@@ -119,27 +129,26 @@ class WWebJSEngine {
       const phone = this.client.info?.wid?.user || null;
       console.log(`[WWJS ${this.numberId}] Conectado! Telefone: ${phone}`);
       this.status = 'connected';
-      this.lastQr = null; // limpa QR cacheado
+      this.lastQr = null;
       await db.updateNumberStatus(this.numberId, 'connected', phone);
-      this.io.emit('number:status', { id: this.numberId, status: 'connected', phone, engine: 'wwjs' });
-      this.io.emit('number:qr_clear', { id: this.numberId });
+      this._emit('number:status', { id: this.numberId, status: 'connected', phone, engine: 'wwjs' });
+      this._emit('number:qr_clear', { id: this.numberId });
     });
 
     this.client.on('authenticated', async () => {
       console.log(`[WWJS ${this.numberId}] Autenticado`);
       this.status = 'authenticated';
       await db.updateNumberStatus(this.numberId, 'authenticated');
-      this.io.emit('number:status', { id: this.numberId, status: 'authenticated' });
+      this._emit('number:status', { id: this.numberId, status: 'authenticated' });
     });
 
     this.client.on('auth_failure', async (msg) => {
       console.error(`[WWJS ${this.numberId}] Falha de autenticação:`, msg);
       this.status = 'auth_failure';
       await db.updateNumberStatus(this.numberId, 'auth_failure');
-      this.io.emit('number:status', { id: this.numberId, status: 'auth_failure', error: msg });
+      this._emit('number:status', { id: this.numberId, status: 'auth_failure', error: msg });
 
       if (!this._destroyed) {
-        // Destrói apenas o client sem tocar em _destroyed, limpa sessão e reinicia
         console.log(`[WWJS ${this.numberId}] Limpando sessão e reiniciando para gerar novo QR...`);
         if (this.client) {
           await this.client.destroy().catch(() => {});
@@ -156,7 +165,7 @@ class WWebJSEngine {
       console.log(`[WWJS ${this.numberId}] Desconectado:`, reason);
       this.status = 'disconnected';
       await db.updateNumberStatus(this.numberId, 'disconnected');
-      this.io.emit('number:status', { id: this.numberId, status: 'disconnected', reason });
+      this._emit('number:status', { id: this.numberId, status: 'disconnected', reason });
     });
 
     this.client.on('message', async (msg) => {

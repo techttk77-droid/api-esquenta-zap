@@ -17,16 +17,26 @@ const db = require('../services/database');
  * Extremely lightweight — no browser needed.
  */
 class BaileysEngine {
-  constructor(numberId, engineType, io) {
+  constructor(numberId, engineType, io, userId = null) {
     this.numberId = numberId;
     this.engineType = engineType || 'baileys';
     this.io = io;
+    this.userId = userId;
     this.status = 'disconnected';
     this.sock = null;
     this._destroyed = false;
-    this.lastQr = null; // cached QR data URL para re-envio
-    this._lastMessages = new Map(); // chatId -> last message key
+    this.lastQr = null;
+    this._lastMessages = new Map();
     this._authPath = path.join(__dirname, '../../sessions', `baileys_${this.numberId}`);
+  }
+
+  // Emite evento apenas para o usuário dono, ou broadcast se não há userId
+  _emit(event, data) {
+    if (this.userId) {
+      this.io.to(`user:${this.userId}`).emit(event, data);
+    } else {
+      this.io.emit(event, data);
+    }
   }
 
   async initialize() {
@@ -56,9 +66,9 @@ class BaileysEngine {
         await db.updateNumberStatus(this.numberId, 'qr_pending');
         try {
           const qrDataUrl = await qrcode.toDataURL(qr);
-          this.lastQr = qrDataUrl; // cache para re-envio
-          this.io.emit('number:qr', { id: this.numberId, qr: qrDataUrl, engine: 'baileys' });
-          this.io.emit('number:status', { id: this.numberId, status: 'qr_pending' });
+          this.lastQr = qrDataUrl;
+          this._emit('number:qr', { id: this.numberId, qr: qrDataUrl, engine: 'baileys' });
+          this._emit('number:status', { id: this.numberId, status: 'qr_pending' });
         } catch (e) {
           console.error(`[Baileys ${this.numberId}] Erro no QR:`, e.message);
         }
@@ -68,10 +78,10 @@ class BaileysEngine {
         const phone = this.sock.user?.id?.split(':')[0] || null;
         console.log(`[Baileys ${this.numberId}] Conectado! Telefone: ${phone}`);
         this.status = 'connected';
-        this.lastQr = null; // limpa QR cacheado
+        this.lastQr = null;
         await db.updateNumberStatus(this.numberId, 'connected', phone);
-        this.io.emit('number:status', { id: this.numberId, status: 'connected', phone, engine: 'baileys' });
-        this.io.emit('number:qr_clear', { id: this.numberId });
+        this._emit('number:status', { id: this.numberId, status: 'connected', phone, engine: 'baileys' });
+        this._emit('number:qr_clear', { id: this.numberId });
       }
 
       if (connection === 'close') {
@@ -81,7 +91,7 @@ class BaileysEngine {
         console.log(`[Baileys ${this.numberId}] Conexão fechada. Motivo: ${reason}`);
         this.status = 'disconnected';
         await db.updateNumberStatus(this.numberId, 'disconnected');
-        this.io.emit('number:status', { id: this.numberId, status: 'disconnected', reason });
+        this._emit('number:status', { id: this.numberId, status: 'disconnected', reason });
 
         if (shouldReconnect && !this._destroyed) {
           console.log(`[Baileys ${this.numberId}] Reconectando...`);
