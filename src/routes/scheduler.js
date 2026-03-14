@@ -17,6 +17,7 @@ router.post('/', async (req, res) => {
     const task = await req.scheduler.addTask(_normalizeTaskBody(req.body));
     res.json(task);
   } catch (e) {
+    console.error('[Scheduler POST] Erro:', e.message, '\nBody recebido:', JSON.stringify(req.body));
     res.status(500).json({ error: e.message });
   }
 });
@@ -27,6 +28,7 @@ router.put('/:id', async (req, res) => {
     const task = await req.scheduler.updateTask(req.params.id, _normalizeTaskBody(req.body));
     res.json(task);
   } catch (e) {
+    console.error('[Scheduler PUT] Erro:', e.message, '\nBody recebido:', JSON.stringify(req.body));
     res.status(500).json({ error: e.message });
   }
 });
@@ -54,6 +56,38 @@ router.post('/:id/trigger', async (req, res) => {
 module.exports = router;
 
 /**
+ * Mapa de possíveis valores enviados pelo frontend → valor do enum Prisma TaskType.
+ * Cobre nomes em português, inglês e variantes com espaço/underline.
+ */
+const TYPE_MAP = {
+  // warm_group
+  'warm_group':         'warm_group',
+  'Conversa em Grupo':  'warm_group',
+  'conversa em grupo':  'warm_group',
+  'warm-group':         'warm_group',
+  // warm_pair
+  'warm_pair':          'warm_pair',
+  'Conversa em Par':    'warm_pair',
+  'conversa em par':    'warm_pair',
+  'warm-pair':          'warm_pair',
+  // send_audio
+  'send_audio':         'send_audio',
+  'Enviar Áudio':       'send_audio',
+  'enviar audio':       'send_audio',
+  'send-audio':         'send_audio',
+  // send_sticker
+  'send_sticker':       'send_sticker',
+  'Enviar Figurinha':   'send_sticker',
+  'enviar figurinha':   'send_sticker',
+  'send-sticker':       'send_sticker',
+  // send_reaction
+  'send_reaction':      'send_reaction',
+  'Enviar Reação':      'send_reaction',
+  'enviar reacao':      'send_reaction',
+  'send-reaction':      'send_reaction',
+};
+
+/**
  * Normaliza o body enviado pelo frontend:
  * O frontend pode enviar campos como groupId, messagesPerCycle, fromId, etc.
  * diretamente no body. O banco espera que esses campos fiquem dentro de `config`.
@@ -61,12 +95,15 @@ module.exports = router;
 function _normalizeTaskBody(body) {
   const { name, type, cronExpression, enabled, config, ...rest } = body;
 
+  // Converte o tipo (display name ou variante) para o valor do enum Prisma
+  const resolvedType = TYPE_MAP[type] ?? type;
+
   // Se `config` já veio preenchido, usa direto; senão monta a partir dos campos extras
   const resolvedConfig = (config && Object.keys(config).length > 0)
     ? config
-    : _buildConfig(type, rest);
+    : _buildConfig(resolvedType, rest);
 
-  return { name, type, cronExpression, enabled, config: resolvedConfig };
+  return { name, type: resolvedType, cronExpression, enabled, config: resolvedConfig };
 }
 
 function _buildConfig(type, fields) {

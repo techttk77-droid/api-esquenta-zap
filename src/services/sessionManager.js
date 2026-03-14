@@ -49,7 +49,7 @@ class SessionManager {
       console.error(`[SessionManager] Erro ao inicializar ${number.engine} para ${numberId}:`, e.message);
       instance.lastError = e.message; // guarda para debug via /status
       this.sessions.delete(numberId);
-      await db.updateNumberStatus(numberId, 'error').catch(() => {});
+      await db.updateNumberStatus(numberId, 'auth_failure').catch(() => {});
       this.io.emit('number:status', { id: numberId, status: 'error', error: e.message });
     });
   }
