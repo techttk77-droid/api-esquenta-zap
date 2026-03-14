@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../services/database');
 const { authMiddleware, JWT_SECRET } = require('../middleware/auth');
 
-const TOKEN_EXPIRY = '30d';
+const TOKEN_EXPIRY = '48h';
 
 // POST /api/auth/register — cria novo usuário
 router.post('/register', async (req, res) => {
