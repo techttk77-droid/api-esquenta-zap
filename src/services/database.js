@@ -286,8 +286,16 @@ class DatabaseService {
 
   // --- Users ----------------------------------------------------------------
 
-  async createUser({ username, password }) {
-    return this.#prisma.user.create({ data: { username, password } });
+  async createUser({ username, password, role, modules, enabled }) {
+    return this.#prisma.user.create({
+      data: {
+        username,
+        password,
+        role: role || 'user',
+        enabled: enabled !== undefined ? enabled : true,
+        modules: modules || 'numbers,groups,scheduler,media,logs,settings',
+      },
+    });
   }
 
   async getUserByUsername(username) {
@@ -304,6 +312,23 @@ class DatabaseService {
 
   async getUserCount() {
     return this.#prisma.user.count();
+  }
+
+  async getAllUsers() {
+    return this.#prisma.user.findMany({ orderBy: { createdAt: 'asc' } });
+  }
+
+  async updateUser(id, data) {
+    return this.#prisma.user.update({ where: { id }, data });
+  }
+
+  async deleteUser(id) {
+    // Remove dados relacionados antes de excluir o usuário
+    await this.#prisma.number.updateMany({ where: { userId: id }, data: { userId: null } });
+    await this.#prisma.group.updateMany({ where: { userId: id }, data: { userId: null } });
+    await this.#prisma.scheduledTask.updateMany({ where: { userId: id }, data: { userId: null } });
+    await this.#prisma.mediaFile.updateMany({ where: { userId: id }, data: { userId: null } });
+    return this.#prisma.user.delete({ where: { id } });
   }
 
   /**

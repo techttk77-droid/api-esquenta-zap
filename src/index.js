@@ -10,6 +10,7 @@ const { SessionManager } = require('./services/sessionManager');
 const { Scheduler } = require('./services/scheduler');
 
 const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
 const numbersRouter = require('./routes/numbers');
 const groupsRouter = require('./routes/groups');
 const schedulerRouter = require('./routes/scheduler');
@@ -50,6 +51,9 @@ app.use((req, _res, next) => {
 
 // Rota pública de autenticação (sem middleware de auth)
 app.use('/api/auth', (req, _res, next) => { req.sessionManager = sessionManager; next(); }, authRouter);
+
+// Rota de administração (auth + admin middleware aplicados internamente)
+app.use('/api/admin', adminRouter);
 
 // Rotas protegidas (authMiddleware aplicado internamente em cada router)
 app.use('/api/numbers', numbersRouter);

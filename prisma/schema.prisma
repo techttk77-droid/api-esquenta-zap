@@ -62,8 +62,12 @@ model User {
   id        String   @id @default(uuid())
   username  String   @unique
   password  String
+  role      String   @default("user")
+  enabled   Boolean  @default(true)
+  modules   String   @default("numbers,groups,scheduler,media,logs,settings")
   machineId String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
 
   numbers    Number[]
   groups     Group[]
