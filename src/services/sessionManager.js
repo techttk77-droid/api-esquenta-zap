@@ -136,6 +136,40 @@ class SessionManager {
   }
 
   /**
+   * Envia uma imagem de um número.
+   */
+  async sendImage(fromId, toPhone, imagePath, caption = '') {
+    const session = this.sessions.get(fromId);
+    if (!session || session.status !== 'connected') {
+      throw new Error(`Número ${fromId} não está conectado`);
+    }
+    const settings = await db.getSettings();
+    await _randomDelay(
+      parseInt(settings.min_delay_ms || '5000'),
+      parseInt(settings.max_delay_ms || '15000')
+    );
+    await session.sendImage(toPhone, imagePath, caption);
+    await db.updateNumberLastActivity(fromId).catch(() => {});
+  }
+
+  /**
+   * Envia um vídeo de um número.
+   */
+  async sendVideo(fromId, toPhone, videoPath, caption = '') {
+    const session = this.sessions.get(fromId);
+    if (!session || session.status !== 'connected') {
+      throw new Error(`Número ${fromId} não está conectado`);
+    }
+    const settings = await db.getSettings();
+    await _randomDelay(
+      parseInt(settings.min_delay_ms || '5000'),
+      parseInt(settings.max_delay_ms || '15000')
+    );
+    await session.sendVideo(toPhone, videoPath, caption);
+    await db.updateNumberLastActivity(fromId).catch(() => {});
+  }
+
+  /**
    * React to a message with an emoji.
    */
   async sendReaction(fromId, toPhone, emoji) {

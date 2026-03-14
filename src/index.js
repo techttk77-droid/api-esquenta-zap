@@ -31,8 +31,10 @@ const io = new Server(server, {
 
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
-app.use('/uploads/audios', express.static(path.join(__dirname, '../audios')));
-app.use('/uploads/stickers', express.static(path.join(__dirname, '../stickers')));
+app.use('/uploads/audios',    express.static(path.join(__dirname, '../audios')));
+app.use('/uploads/stickers',  express.static(path.join(__dirname, '../stickers')));
+app.use('/uploads/images',    express.static(path.join(__dirname, '../images')));
+app.use('/uploads/videos',    express.static(path.join(__dirname, '../videos')));
 
 // Inject io, sessionManager e scheduler nas requisições
 const sessionManager = new SessionManager(io);

@@ -133,6 +133,28 @@ class BaileysEngine {
     });
   }
 
+  async sendImage(toPhone, imagePath, caption = '') {
+    const jid = _formatJid(toPhone);
+    const buffer = fs.readFileSync(imagePath);
+    const mimetype = _getMimetype(imagePath, 'image/jpeg');
+    return this.sock.sendMessage(jid, {
+      image: buffer,
+      mimetype,
+      caption,
+    });
+  }
+
+  async sendVideo(toPhone, videoPath, caption = '') {
+    const jid = _formatJid(toPhone);
+    const buffer = fs.readFileSync(videoPath);
+    const mimetype = _getMimetype(videoPath, 'video/mp4');
+    return this.sock.sendMessage(jid, {
+      video: buffer,
+      mimetype,
+      caption,
+    });
+  }
+
   async sendReaction(toPhone, emoji) {
     const jid = _formatJid(toPhone);
     const msgKey = this._lastMessages.get(jid);
@@ -160,6 +182,17 @@ function _formatJid(phone) {
   if (phone.includes('@')) return phone;
   const digits = phone.replace(/\D/g, '');
   return `${digits}@s.whatsapp.net`;
+}
+
+function _getMimetype(filePath, fallback) {
+  const ext = filePath.split('.').pop().toLowerCase();
+  const map = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    gif: 'image/gif', webp: 'image/webp',
+    mp4: 'video/mp4', mov: 'video/quicktime',
+    avi: 'video/x-msvideo', mkv: 'video/x-matroska',
+  };
+  return map[ext] || fallback;
 }
 
 function _delay(ms) {

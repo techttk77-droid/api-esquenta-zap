@@ -91,6 +91,12 @@ class Scheduler {
       case 'send_reaction':
         await this._sendReactionInGroup(task.config);
         break;
+      case 'send_image':
+        await this._sendImageToGroup(task.config);
+        break;
+      case 'send_video':
+        await this._sendVideoToGroup(task.config);
+        break;
       default:
         console.warn(`[Scheduler] Unknown task type: ${task.type}`);
     }
@@ -282,6 +288,78 @@ class Scheduler {
       });
     } catch (e) {
       console.error('[Scheduler] Erro ao enviar reação:', e.message);
+    }
+  }
+
+  /**
+   * Envia uma imagem aleatória da biblioteca dentro de um grupo.
+   */
+  async _sendImageToGroup(config) {
+    const { groupId, imageId, caption = '' } = config;
+    const group = await db.getGroupById(groupId);
+    if (!group || group.members.length < 2) return;
+
+    const media = await db.getAllMedia('image');
+    const image = imageId ? media.find((m) => m.id === imageId) : _randomItem(media);
+    if (!image) return;
+
+    const imagePath = path.join(__dirname, '../../images', image.filename);
+    const allMembers = group.members.map((m) => m.number);
+    const connected = allMembers.filter(
+      (m) => this.sessionManager.getSession(m.id)?.status === 'connected'
+    );
+    if (connected.length < 2) return;
+
+    const sender   = _randomItem(connected);
+    const receiver = _randomItem(connected.filter((m) => m.id !== sender.id));
+
+    try {
+      await this.sessionManager.sendImage(sender.id, receiver.phone, imagePath, caption);
+      await db.logConversation(sender.id, receiver.id, `[image: ${image.name}]`, 'image');
+      this.io.emit('conversation:log', {
+        from: sender.name || sender.id,
+        to:   receiver.name || receiver.id,
+        message: `🖼️ Imagem: ${image.name}`,
+        type: 'image',
+      });
+    } catch (e) {
+      console.error('[Scheduler] Erro ao enviar imagem:', e.message);
+    }
+  }
+
+  /**
+   * Envia um vídeo aleatório da biblioteca dentro de um grupo.
+   */
+  async _sendVideoToGroup(config) {
+    const { groupId, videoId, caption = '' } = config;
+    const group = await db.getGroupById(groupId);
+    if (!group || group.members.length < 2) return;
+
+    const media = await db.getAllMedia('video');
+    const video = videoId ? media.find((m) => m.id === videoId) : _randomItem(media);
+    if (!video) return;
+
+    const videoPath = path.join(__dirname, '../../videos', video.filename);
+    const allMembers = group.members.map((m) => m.number);
+    const connected = allMembers.filter(
+      (m) => this.sessionManager.getSession(m.id)?.status === 'connected'
+    );
+    if (connected.length < 2) return;
+
+    const sender   = _randomItem(connected);
+    const receiver = _randomItem(connected.filter((m) => m.id !== sender.id));
+
+    try {
+      await this.sessionManager.sendVideo(sender.id, receiver.phone, videoPath, caption);
+      await db.logConversation(sender.id, receiver.id, `[video: ${video.name}]`, 'video');
+      this.io.emit('conversation:log', {
+        from: sender.name || sender.id,
+        to:   receiver.name || receiver.id,
+        message: `🎥 Vídeo: ${video.name}`,
+        type: 'video',
+      });
+    } catch (e) {
+      console.error('[Scheduler] Erro ao enviar vídeo:', e.message);
     }
   }
 

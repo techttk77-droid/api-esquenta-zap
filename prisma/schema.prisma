@@ -24,6 +24,8 @@ enum NumberStatus {
 enum MediaType {
   audio
   sticker
+  image
+  video
 }
 
 enum TaskType {
@@ -32,6 +34,8 @@ enum TaskType {
   send_audio
   send_sticker
   send_reaction
+  send_image
+  send_video
 }
 
 model Number {

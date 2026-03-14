@@ -195,6 +195,18 @@ class WWebJSEngine {
     return this.client.sendMessage(chatId, media, { sendMediaAsSticker: true });
   }
 
+  async sendImage(toPhone, imagePath, caption = '') {
+    const chatId = await _resolveChatId(this.client, toPhone);
+    const media = MessageMedia.fromFilePath(imagePath);
+    return this.client.sendMessage(chatId, media, { caption });
+  }
+
+  async sendVideo(toPhone, videoPath, caption = '') {
+    const chatId = await _resolveChatId(this.client, toPhone);
+    const media = MessageMedia.fromFilePath(videoPath);
+    return this.client.sendMessage(chatId, media, { caption });
+  }
+
   async sendReaction(toPhone, emoji) {
     const chatId = await _resolveChatId(this.client, toPhone);
     const msgId = this._lastMessageIds.get(chatId);

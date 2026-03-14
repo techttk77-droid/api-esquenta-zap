@@ -84,8 +84,16 @@ const TYPE_MAP = {
   'send_reaction':      'send_reaction',
   'Enviar Reação':      'send_reaction',
   'enviar reacao':      'send_reaction',
-  'send-reaction':      'send_reaction',
-};
+  'send-reaction':      'send_reaction',  // send_image
+  'send_image':         'send_image',
+  'Enviar Imagem':      'send_image',
+  'enviar imagem':      'send_image',
+  'send-image':         'send_image',
+  // send_video
+  'send_video':         'send_video',
+  'Enviar V\u00eddeo':        'send_video',
+  'enviar video':       'send_video',
+  'send-video':         'send_video',};
 
 /**
  * Normaliza o body enviado pelo frontend:
@@ -132,6 +140,18 @@ function _buildConfig(type, fields) {
     case 'send_reaction':
       return {
         groupId: fields.groupId ?? null,
+      };
+    case 'send_image':
+      return {
+        groupId: fields.groupId ?? null,
+        imageId: fields.imageId ?? null,
+        caption: fields.caption ?? '',
+      };
+    case 'send_video':
+      return {
+        groupId:  fields.groupId  ?? null,
+        videoId:  fields.videoId  ?? null,
+        caption:  fields.caption  ?? '',
       };
     default:
       return fields;
