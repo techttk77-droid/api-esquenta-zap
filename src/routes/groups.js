@@ -9,7 +9,7 @@ router.use(authMiddleware);
 // GET /api/groups
 router.get('/', async (req, res) => {
   try {
-    res.json(await db.getAllGroups(req.user.userId));
+    res.json(await db.getAllGroups(req.user.userId)); 
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
