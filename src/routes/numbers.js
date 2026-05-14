@@ -26,13 +26,7 @@ router.post('/', async (req, res) => {
   try {
     const { name, phone, engine, autoReconnect } = req.body;
 
-    // Seleciona engine automaticamente com base no threshold
-    const settings = await db.getSettings();
-    const threshold = parseInt(settings.engine_threshold || '10');
-    const allNumbers = await db.getAllNumbers(req.user.userId);
-    const selectedEngine = engine || (allNumbers.length >= threshold ? 'baileys' : 'wwjs');
-
-    const number = await db.createNumber({ name, phone, engine: selectedEngine, autoReconnect, userId: req.user.userId });
+    const number = await db.createNumber({ name, phone, engine: 'baileys', autoReconnect, userId: req.user.userId });
     res.json(number);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -79,8 +73,8 @@ router.post('/:id/disconnect', async (req, res) => {
 // POST /api/numbers/:id/switch-engine
 router.post('/:id/switch-engine', async (req, res) => {
   const { engine } = req.body;
-  if (!['wwjs', 'baileys'].includes(engine)) {
-    return res.status(400).json({ error: 'Invalid engine. Use "wwjs" or "baileys".' });
+  if (engine !== 'baileys') {
+    return res.status(400).json({ error: 'Invalid engine. Only "baileys" is supported.' });
   }
   try {
     await req.sessionManager.switchEngine(req.params.id, engine);

@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-warmer-backend",
   "version": "1.0.0",
-  "description": "WhatsApp Number Warmer - Backend with dual engine support (whatsapp-web.js & Baileys)",
+  "description": "WhatsApp Number Warmer - Backend powered by Baileys",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -27,8 +27,7 @@
     "pino-pretty": "^11.0.0",
     "qrcode": "^1.5.3",
     "socket.io": "^4.7.5",
-    "uuid": "^9.0.1",
-    "whatsapp-web.js": "^1.26.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.0",

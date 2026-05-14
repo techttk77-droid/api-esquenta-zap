@@ -8,7 +8,6 @@ datasource db {
 }
 
 enum Engine {
-  wwjs
   baileys
 }
 
@@ -42,7 +41,7 @@ model Number {
   id            String       @id @default(uuid())
   name          String?
   phone         String?
-  engine        Engine       @default(wwjs)
+  engine        Engine       @default(baileys)
   status        NumberStatus @default(disconnected)
   autoReconnect Boolean      @default(true)
   createdAt     DateTime     @default(now())

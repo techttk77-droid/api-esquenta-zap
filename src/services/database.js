@@ -47,7 +47,7 @@ class DatabaseService {
       { key: 'min_delay_ms',      value: '5000'  },
       { key: 'max_delay_ms',      value: '15000' },
       { key: 'engine_threshold',  value: '10'    },
-      { key: 'default_engine',    value: 'wwjs'  },
+      { key: 'default_engine',    value: 'baileys'  },
       { key: 'daily_msg_limit',   value: '50'    },
       { key: 'typing_simulation', value: '1'     },
     ];

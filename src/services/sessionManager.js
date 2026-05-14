@@ -1,18 +1,17 @@
 const db = require('./database');
-const { WWebJSEngine } = require('../engines/wwjs');
 const { BaileysEngine } = require('../engines/baileys');
 const fs = require('fs');
 const path = require('path');
 
 /**
  * SessionManager
- * Manages multiple WhatsApp sessions using either whatsapp-web.js (wwjs)
- * or Baileys engine per number. Emits real-time events via Socket.IO.
+ * Manages multiple WhatsApp sessions using Baileys engine.
+ * Emits real-time events via Socket.IO.
  */
 class SessionManager {
   constructor(io) {
     this.io = io;
-    /** @type {Map<string, WWebJSEngine|BaileysEngine>} */
+    /** @type {Map<string, BaileysEngine>} */
     this.sessions = new Map();
     this._startExpiryWatcher();
   }
@@ -21,7 +20,7 @@ class SessionManager {
    * Returns the appropriate engine class based on engine type string.
    */
   _getEngineClass(engine) {
-    return engine === 'baileys' ? BaileysEngine : WWebJSEngine;
+    return BaileysEngine;
   }
 
   /**
@@ -66,7 +65,7 @@ class SessionManager {
   }
 
   /**
-   * Troca o engine de um número (wwjs ↔ baileys) e reconecta.
+   * Reconecta um número com engine baileys.
    */
   async switchEngine(numberId, newEngine) {
     await db.updateNumberEngine(numberId, newEngine);
@@ -240,9 +239,7 @@ class SessionManager {
    */
   _clearSessionFolder(numberId, engine) {
     try {
-      const folderPath = engine === 'baileys'
-        ? path.join(__dirname, '../../sessions', `baileys_${numberId}`)
-        : path.join(__dirname, '../../sessions', numberId);
+      const folderPath = path.join(__dirname, '../../sessions', `baileys_${numberId}`);
 
       if (fs.existsSync(folderPath)) {
         fs.rmSync(folderPath, { recursive: true, force: true });
